@@ -1851,3 +1851,25 @@ def preflight_or_raise(cfg: dict) -> None:
 
     # OK
     return
+
+def userinfo(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ruft https://api.pcloud.com/userinfo (REST) auf und gibt das JSON zurück.
+    Erwartet {"result":0, ...} bei Erfolg.
+    """
+    import requests
+    base = "https://api.pcloud.com"
+    params = {
+        "access_token": cfg.get("token") or "",
+        "getauth": 1,  # auth-info mitsenden
+        "logout": 0,
+    }
+    r = requests.get(f"{base}/userinfo", params=params, timeout=int(cfg.get("timeout", 30)))
+    try:
+        j = r.json()
+    except Exception:
+        raise RuntimeError(f"userinfo: HTTP {r.status_code}, kein JSON")
+    if j.get("result") not in (0, None):
+        # pCloud-Fehlercodes, z.B. 2000/2008/5000
+        raise RuntimeError(f"userinfo failed: {j}")
+    return j
