@@ -1,0 +1,800 @@
+############### nächstes File: //etc/systemd/system/entropywatcher-nas-av-weekly.service ###############
+[Unit]
+Description=EntropyWatcher ClamAV Scan (WEEKLY full)
+Wants=network-online.target clamav-daemon.service
+After=network-online.target clamav-daemon.service
+RequiresMountsFor=/srv/nas
+
+[Service]
+SyslogIdentifier=ew-nas-av-weekly
+
+Type=oneshot
+User=thomas
+Group=thomas
+WorkingDirectory=/opt/apps/entropywatcher
+Environment=PYTHONNOUSERSITE=1
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+# lade deine Projekt-.env zusätzlich zur python-dotenv (praktisch für Mail/Timerläufe)
+EnvironmentFile=-/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=-/opt/apps/entropywatcher/config/nas-av-weekly.env
+
+#Environment=LOG_LEVEL=INFO
+#Environment=LOG_FILE=/var/log/entropywatcher/entropywatcher-nas-av-weekly.log
+
+# Full-Scan
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py av-scan --paths ${SCAN_PATHS}
+TimeoutStartSec=8h
+
+[Install]
+WantedBy=multi-user.target
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas-av-weekly.timer ###############
+# /etc/systemd/system/entropywatcher-nas-av-weekly.timer
+[Unit]
+Description=EntropyWatcher NAS AV weekly fullscan (Sun)
+
+[Timer]
+OnCalendar=Sun 03:00
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=1min
+# wichtig, Verbindung zum zu startenden Service
+Unit=entropywatcher-nas-av-weekly.service
+
+[Install]
+WantedBy=timers.target
+
+
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas-av.service ###############
+[Unit]
+Description=EntropyWatcher ClamAV Scan Hot Paths
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/nas
+
+[Service]
+SyslogIdentifier=ew-nas-av-hot
+
+Type=oneshot
+User=thomas
+Group=thomas
+WorkingDirectory=/opt/apps/entropywatcher
+Environment=PYTHONNOUSERSITE=1
+EnvironmentFile=-/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=-/opt/apps/entropywatcher/config/nas-av.env
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+
+# Hot-Pfade scannen:
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py av-scan --paths ${SCAN_PATHS}
+
+TimeoutStartSec=4h
+
+[Install]
+WantedBy=multi-user.target
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas-av.timer ###############
+# /etc/systemd/system/entropywatcher-nas-av.timer
+[Unit]
+Description=EntropyWatcher NAS AV daily (Mon..Sat)
+
+[Timer]
+OnCalendar=Mon..Sat 02:00
+RandomizedDelaySec=10m
+AccuracySec=1m
+Persistent=true
+
+# wichtig, Verbindung zum zu startenden Service
+Unit=entropywatcher-nas-av.service
+
+[Install]
+WantedBy=timers.target
+
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas.service ###############
+[Unit]
+Description=EntropyWatcher Scan (Delta)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/nas
+
+
+[Service]
+SyslogIdentifier=ew-nas-scan
+
+Type=oneshot
+User=thomas
+Group=thomas
+WorkingDirectory=/opt/apps/entropywatcher
+EnvironmentFile=-/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=-/opt/apps/entropywatcher/config/nas.env
+Environment=PYTHONNOUSERSITE=1
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py scan --paths "${SCAN_PATHS}"
+
+TimeoutStartSec=2h
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas.service$ ###############
+[Unit]
+Description=EntropyWatcher Scan (Delta)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+#Datenbank Herkunfts-Flag setzen
+Environment=SOURCE_LABEL=nas
+Type=oneshot
+User=thomas
+Group=thomas
+WorkingDirectory=/opt/entropywatcher
+
+# stelle sicher, dass nur venv benutzt wird
+Environment=PYTHONNOUSERSITE=1
+
+# Mail Deklaration
+Environment=MAIL_FROM="NAS-EntropyWatcher <my.email@example.com>"
+Environment=MAIL_SUBJECT_PREFIX="[NAS-EntropyWatcher]"
+
+
+# lade deine Projekt-.env zusätzlich zur python-dotenv (praktisch für Mail/Timerläufe)
+EnvironmentFile=-/etc/entropywatcher/common.env
+EnvironmentFile=-/etc/entropywatcher/nas.env
+
+
+Environment=LOG_LEVEL=INFO
+Environment=LOG_FILE=/var/log/entropywatcher/entropywatcher-nas.log
+
+# netter zu IO/CPU
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+
+# Pfadliste KOMMA-getrennt Ohne Leerzeichen zwischen den Kommas!
+# bspw.: Environment=SCAN_PATHS="/mein Pfad/hat Leerzeichen,/srv/nas/Thomas"
+##Environment=SCAN_PATHS=/srv/nas/Monika,/srv/nas/Thomas
+Environment=SCAN_PATHS="/srv/nas"
+
+# eigentliche Ausführung (Delta-Scan)
+ExecStart=/opt/entropywatcher/venv/bin/python /opt/entropywatcher/entropywatcher.py scan --paths ${SCAN_PATHS}
+
+# falls der Scan doch mal crasht, versuch es später nochmal
+#Restart=no
+TimeoutStartSec=2h
+
+############### nächstes File: //etc/systemd/system/entropywatcher-nas.timer ###############
+[Unit]
+Description=Run EntropyWatcher NAS scan hourly
+
+[Timer]
+# erster Start 5 Min nach Boot
+OnBootSec=5min
+# dann jede Stunde
+OnCalendar=*-*-* *:20:00
+AccuracySec=1m
+# bei verpassten Läufen (z.B. Gerät aus) nachholen
+Persistent=true
+# um "Herdentrieb" zu vermeiden (Mailserver/IO), leicht zufällige Verzögerung
+RandomizedDelaySec=5min
+
+Unit=entropywatcher-nas.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os-av-weekly.service ###############
+# /etc/systemd/system/entropywatcher-os-av-weekly.service
+
+[Unit]
+Description=EntropyWatcher ClamAV Scan (OS weekly fuller scope)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/apps/entropywatcher
+Environment=PYTHONNOUSERSITE=1
+
+SyslogIdentifier=ew-os-av-weekly
+
+#Environment=LOG_FILE=/var/log/entropywatcher/entropywatcher-os-av-weekly.log
+#Environment=LOG_LEVEL=INFO
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+# lade deine Projekt-.env zusätzlich zur python-dotenv (praktisch für Mail/Timerläufe)
+EnvironmentFile=/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=/opt/apps/entropywatcher/config/os-av-weekly.env
+
+# Full-Scan
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py av-scan --paths ${SCAN_PATHS}
+TimeoutStartSec=4h
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os-av-weekly.timer ###############
+# /etc/systemd/system/entropywatcher-os-av-weekly.timer
+[Unit]
+Description=EntropyWatcher OS AV weekly (Sun)
+
+[Timer]
+OnCalendar=Sun 03:10
+Persistent=true
+RandomizedDelaySec=20m
+AccuracySec=1m
+Unit=entropywatcher-os-av-weekly.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os-av.service ###############
+# /etc/systemd/system/entropywatcher-os-av.service
+
+[Unit]
+Description=EntropyWatcher ClamAV Scan (OS Hot daily)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/apps/entropywatcher
+Environment=PYTHONNOUSERSITE=1
+
+SyslogIdentifier=ew-os-av-hot
+
+#Environment=LOG_LEVEL=INFO
+#Environment=LOG_FILE=/var/log/entropywatcher/entropywatcher-os-av.log
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# optional (cgroups v2 / Debian 12):
+# IOWeight=50
+# CPUWeight=10
+
+# lade deine Projekt-.env zusätzlich zur python-dotenv (praktisch für Mail/Timerläufe)
+EnvironmentFile=/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=/opt/apps/entropywatcher/config/os-av.env
+
+# Hot-Pfade scannen:
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py av-scan --paths ${SCAN_PATHS}
+TimeoutStartSec=2h
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os-av.timer ###############
+# /etc/systemd/system/entropywatcher-os-av.timer
+[Unit]
+Description=EntropyWatcher OS AV daily (Mon..Sat)
+
+[Timer]
+OnCalendar=Mon..Sat 02:40
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1min
+Unit=entropywatcher-os-av.service
+
+[Install]
+WantedBy=timers.target
+
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os.service ###############
+# /etc/systemd/system/entropywatcher-os.service *
+
+[Unit]
+Description=EntropyWatcher Scan (OS Pfade)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+SyslogIdentifier=ew-os-scan
+
+
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/apps/entropywatcher
+Environment=PYTHONNOUSERSITE=1
+
+# lade deine Projekt-.env zusätzlich zur python-dotenv (praktisch für Mail/Timerläufe)
+EnvironmentFile=/opt/apps/entropywatcher/config/common.env
+EnvironmentFile=/opt/apps/entropywatcher/config/os.env
+
+# Logging-Datei (Ordner muss existieren & dem user gehören):
+#Environment=LOG_LEVEL=INFO
+#Environment=LOG_FILE=/var/log/entropywatcher/entropywatcher-os.log
+
+
+# IO/CPU freundlicher:
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# (optional cgroups v2)
+# IOWeight=50
+# CPUWeight=10
+
+
+# Entropity OS (Betriebssystem) scannen:
+ExecStart=/opt/apps/entropywatcher/venv/bin/python /opt/apps/entropywatcher/main/entropywatcher.py scan --paths ${SCAN_PATHS}
+
+# Zeitlimit falls OS-Pfade mal „zäh“ sind
+TimeoutStartSec=1h
+
+############### nächstes File: //etc/systemd/system/entropywatcher-os.timer ###############
+# /etc/systemd/system/entropywatcher-os.timer
+[Unit]
+Description=EntropyWatcher OS-Scan (daily, no overlap)
+
+[Timer]
+OnBootSec=5min
+OnCalendar=Mon..Sun 03:40
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=5min
+Unit=entropywatcher-os.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/safe-backup-fresh.service ###############
+[Unit]
+Description=Safe Backup if fresh summary (%i)
+Wants=network-online.target
+After=network-online.target mariadb.service
+
+[Service]
+SyslogIdentifier=ew-safe-backup
+
+Type=exec
+User=root
+WorkingDirectory=/opt/entropywatcher
+EnvironmentFile=/opt/entropywatcher/common.env
+EnvironmentFile=-/opt/entropywatcher/backup-%i.env
+# Eigene State-Datei je Quelle, verhindert Doppelstarts
+Environment=BACKUP_STATE_FILE=/var/lib/entropywatcher/safe_backup_state_%i.json
+
+# Moderat! Der Command checkt DB+State und entscheidet selbst.
+ExecStart=/usr/bin/env python3 /opt/entropywatcher/safe_backup.py run-if-fresh \
+  --source %i \
+  --freshness-sec ${BACKUP_FRESHNESS_SEC:-7200} \
+  --cooldown-sec ${BACKUP_COOLDOWN_SEC:-0} \
+  --decide auto \
+  --borg-repo ${BORG_REPO} \
+  --borg-passphrase ${BORG_PASSPHRASE} \
+  --archive "%i-{now:%Y-%m-%d_%H-%M}" \
+  --sources "${BACKUP_SOURCES}" \
+  --exclude-file /opt/entropywatcher/excludes_borg.txt \
+  --compression ${BORG_COMPRESSION:-lz4} \
+  --extra-args "${BORG_EXTRA_ARGS}"
+
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=100
+CPUQuota=80%
+IOWeight=50
+
+############### nächstes File: //etc/systemd/system/safe-backup-nas.timer ###############
+y# /etc/systemd/system/safe-backup-nas.timer
+[Unit]
+Description=Safe Backup NAS run-if-fresh (hourly)
+
+[Timer]
+OnCalendar=*-*-* *:45:00
+RandomizedDelaySec=5m
+AccuracySec=1m
+Persistent=true
+Unit=safe-backup-nas.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/safe-backup-os.timer ###############
+# /etc/systemd/system/safe-backup-os.timer
+[Unit]
+Description=Safe Backup OS run-if-fresh (daily)
+
+[Timer]
+OnCalendar=Mon..Sun 03:55
+RandomizedDelaySec=10m
+AccuracySec=1m
+Persistent=true
+Unit=safe-backup-os.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-nas-av-weekly.timer ###############
+# /etc/systemd/system/entropywatcher-nas-av-weekly.timer
+[Unit]
+Description=EntropyWatcher NAS AV weekly fullscan (Sun)
+
+[Timer]
+OnCalendar=Sun 03:00
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=1min
+# wichtig, Verbindung zum zu startenden Service
+Unit=entropywatcher-nas-av-weekly.service
+
+[Install]
+WantedBy=timers.target
+
+
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-nas-av.timer ###############
+# /etc/systemd/system/entropywatcher-nas-av.timer
+[Unit]
+Description=EntropyWatcher NAS AV daily (Mon..Sat)
+
+[Timer]
+OnCalendar=Mon..Sat 02:00
+RandomizedDelaySec=10m
+AccuracySec=1m
+Persistent=true
+
+# wichtig, Verbindung zum zu startenden Service
+Unit=entropywatcher-nas-av.service
+
+[Install]
+WantedBy=timers.target
+
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-nas.timer ###############
+[Unit]
+Description=Run EntropyWatcher NAS scan hourly
+
+[Timer]
+# erster Start 5 Min nach Boot
+OnBootSec=5min
+# dann jede Stunde
+OnCalendar=*-*-* *:20:00
+AccuracySec=1m
+# bei verpassten Läufen (z.B. Gerät aus) nachholen
+Persistent=true
+# um "Herdentrieb" zu vermeiden (Mailserver/IO), leicht zufällige Verzögerung
+RandomizedDelaySec=5min
+
+Unit=entropywatcher-nas.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-os-av-weekly.timer ###############
+# /etc/systemd/system/entropywatcher-os-av-weekly.timer
+[Unit]
+Description=EntropyWatcher OS AV weekly (Sun)
+
+[Timer]
+OnCalendar=Sun 03:10
+Persistent=true
+RandomizedDelaySec=20m
+AccuracySec=1m
+Unit=entropywatcher-os-av-weekly.service
+
+[Install]
+WantedBy=timers.target
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-os-av.timer ###############
+# /etc/systemd/system/entropywatcher-os-av.timer
+[Unit]
+Description=EntropyWatcher OS AV daily (Mon..Sat)
+
+[Timer]
+OnCalendar=Mon..Sat 02:40
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1min
+Unit=entropywatcher-os-av.service
+
+[Install]
+WantedBy=timers.target
+
+
+############### nächstes File: //etc/systemd/system/timers.target.wants/entropywatcher-os.timer ###############
+# /etc/systemd/system/entropywatcher-os.timer
+[Unit]
+Description=EntropyWatcher OS-Scan (daily, no overlap)
+
+[Timer]
+OnBootSec=5min
+OnCalendar=Mon..Sun 03:40
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=5min
+Unit=entropywatcher-os.service
+
+[Install]
+WantedBy=timers.target
+
+
+############### nächstes File: /opt/apps/entropywatcher/config/common.env ###############
+# /opt/entropywatcher/common.env *
+
+##### DB #####
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=myDBname
+DB_USER=myDBUser
+DB_PASS='mySecretDBPasswort'
+
+##### Mail (gemeinsame Defaults; Service-spezifisches Branding in den *.env) #####
+MAIL_ENABLE=1
+MAIL_SMTP_HOST=mail.example.net
+MAIL_SMTP_PORT=587
+MAIL_STARTTLS=1
+
+MAIL_TO=my.email@example.com
+MAIL_SSL=0
+MAIL_PASS='MySecretMailToken'
+MAIL_USER='my.email@example.com'
+
+# globales (Fallback) Rate-Limit-File – pro Service besser überschreiben!
+MAIL_MIN_ALERT_INTERVAL_MIN=0
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert.txt
+
+##### EntropyWatcher – allgemeine Defaults #####
+# (OS-/NAS-spezifische EXCLUDES/SCAN_PATHS bleiben in den jeweiligen *.env)
+
+# Minimale/Maximale Dateigröße (0 = kein Limit)
+MIN_SIZE=1
+MAX_SIZE=0
+
+
+####################### START Detail-Doku ###################################
+# Entropie-Engine
+## USE_ENT=1                  # 'ent' verwenden (falls vorhanden)
+## ENT_THRESHOLD=2097152      # ab 2 MiB 'ent', darunter NumPy (performant auf FUSE/NAS)
+## ENT_TIMEOUT=30             # Sekunden Timeout für 'ent'
+## CHUNK_SIZE=4194304         # 4 MiB Lese-Chunk
+## WORKERS=3                  # Heavy-Worker-Prozesse
+
+# Heuristiken / Härtung
+## ALERT_ENTROPY_ABS=7.8      # absoluter Alarm-Schwellenwert (bits/Byte)
+## ALERT_ENTROPY_JUMP=1.0     # Alarm, wenn Sprung ≥ 1.0 (relativ zur Baseline/prev)
+## QUICK_FINGERPRINT=1        # Head/Tail-MD5 zur schnellen Änderungsdetektion
+## QUICK_FP_SAMPLE=65536      # je 64 KiB Kopf+Ende
+## PERIODIC_REVERIFY_DAYS=7   # alle 7 Tage Vollverifikation trotz unverändertem mtime
+####################### ENDE Detail-Doku ###################################
+
+# Entropie-Engine – nutzt 'ent' ab 2 MiB, sonst NumPy; 30s Timeout; 4 MiB Chunk; 3 Heavy-Worker
+USE_ENT=1
+ENT_THRESHOLD=2097152
+ENT_TIMEOUT=30
+CHUNK_SIZE=4194304
+WORKERS=3
+
+# ---- entropywatcher health window & thresholds ----
+HEALTH_WINDOW_MIN=120          # Minuten, in denen aktuelle Läufe erwartet werden
+HEALTH_AV_FINDINGS_MAX=0       # max. AV-Funde im Fenster
+HEALTH_FLAGGED_MAX=0           # max. flagged Dateien im Fenster
+HEALTH_SAFEAGE_MIN=30          # Mindestalter (Min) seit letztem grünen Scan
+
+
+# Heuristiken/Härtung – absoluter Schwellenwert, Sprung-Detektion, Quick-Fingerprint, Stichprobengröße, periodische Vollverifikation (Tage)
+ALERT_ENTROPY_ABS=7.8
+ALERT_ENTROPY_JUMP=1.0
+QUICK_FINGERPRINT=1
+QUICK_FP_SAMPLE=65536
+PERIODIC_REVERIFY_DAYS=7
+
+# Logging (Level global; LOG_FILE meist pro Service/ENV setzen oder leer lassen → stdout/journal)
+LOG_LEVEL=INFO
+
+##### ClamAV (Defaults; einschalten nur in AV-ENVs!) #####
+# CLAMAV_ENABLE=0           <- Standard AUS; nur in nas-av*.env / os-av*.env auf 1 setzen
+CLAMAV_ENABLE=0
+CLAMAV_USE_CLAMD=1
+CLAMAV_EXCLUDES_MODE=glob
+CLAMAV_EXCLUDES="/srv/nas/av-quarantine/*,*/.cache/*,*/node_modules/*,*/.venv/*,*/__pycache__/*,*/.git/*,*.iso,*.img,*.vhd,*.vdi,*.qcow2"
+CLAMAV_MAX_FILESIZE_MB=1024
+CLAMAV_THREADS=1
+CLAMAV_TIMEOUT=3600
+
+# Quarantäne
+AV_QUARANTINE_DIR=/srv/nas/av-quarantine
+AV_QUARANTINE_ACTION=move    # move|copy|chmod|none
+AV_QUARANTINE_CHMOD=000      # nur bei ACTION=chmod relevant
+
+############### nächstes File: /opt/apps/entropywatcher/config/nas-av-weekly.env ###############
+# /opt/entropywatcher/nas-av-weekly.env
+
+#DB/Label (man weiss nie, plötzlich wird es sinnvoll)
+SOURCE_LABEL=nas-av-weekly
+SCAN_PATHS="/srv/nas"
+
+MAIL_FROM="NAS-AV-Weekly-EntropyWatcher <my.email@example.com>"
+MAIL_SUBJECT_PREFIX="[NAS-AV-Weekly]"
+
+#Environment=LOG_LEVEL=INFO
+#LOG_FILE=/var/log/entropywatcher/entropywatcher-nas-av.log
+
+#Mail-Alert-Log
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_nas-av.weekly.txt
+
+CLAMAV_ENABLE=1
+CLAMAV_USE_CLAMD=1    # wenn du den Daemon verwenden willst (schneller)
+
+CLAMAV_EXCLUDES="*.iso,*.img,*/.recycle/*,*/@Recycle/*,*/@eaDir/*,*/.DS_Store,*/._*"
+CLAMAV_EXCLUDES_MODE=glob
+
+############### nächstes File: /opt/apps/entropywatcher/config/nas-av.env ###############
+#  /opt/entropywatcher/nas-av.env
+
+#DB/Label (man weiss nie, plötzlich wird es sinnvoll)
+SOURCE_LABEL=nas-av
+SCAN_PATHS="/srv/nas/Monika,/srv/nas/Thomas,/srv/nas/Giulia"
+
+MAIL_FROM="NAS-AV-HOT-PATHS-EntropyWatcher <my.email@example.com>"
+MAIL_SUBJECT_PREFIX="[NAS-AV-Hot]"
+
+#Environment=LOG_LEVEL=INFO
+#LOG_FILE=/var/log/entropywatcher/entropywatcher-nas-av.log
+
+#Mail-Alert-Log
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_nas-av.txt
+
+
+CLAMAV_ENABLE=1
+CLAMAV_USE_CLAMD=1    # wenn du den Daemon verwenden willst (schneller)
+
+CLAMAV_EXCLUDES="*.iso,*.img,*/.recycle/*,*/@Recycle/*,*/@eaDir/*,*/.DS_Store,*/._*"
+CLAMAV_EXCLUDES_MODE=glob
+
+############### nächstes File: /opt/apps/entropywatcher/config/nas-os-weekly.env ###############
+# /opt/entropywatcher/nas-os-weekly.env 
+
+#DB/Label (man weiss nie, plötzlich wird es sinnvoll)
+SOURCE_LABEL=os-av-weekly
+
+# Breiter, aber noch realistisch ohne Root
+SCAN_PATHS="/usr/local,/opt,/var/www,/boot,/etc"
+
+# Gleiche Excludes wie hot + typische Systemriesen raus
+CLAMAV_EXCLUDES_MODE=glob
+CLAMAV_EXCLUDES="*/.cache/*,*/node_modules/*,*/.venv/*,*/__pycache__/*,*/.git/*,\
+*.iso,*.img,*.vhd,*.vdi,*.qcow2,\
+/proc/*,/sys/*,/dev/*,/run/*,/var/tmp/*,/tmp/*,/var/cache/*,/var/log/*,\
+/var/lib/docker/*,/var/lib/containers/*,/var/lib/mysql/*,\
+/etc/ssh/*key*,/etc/shadow*,/etc/gshadow*,/etc/sudoers,/etc/sudoers.d/*,/etc/ppp/*"
+
+# Optional: Mail-Branding
+MAIL_FROM="OS-AV-Weekly <my.email@example.com>"
+MAIL_SUBJECT_PREFIX="[OS-AV-Weekly]"
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_os-av-weekly.txt
+
+############### nächstes File: /opt/apps/entropywatcher/config/nas.env ###############
+#  /opt/entropywatcher/nas.env
+
+SOURCE_LABEL=nas
+SCAN_PATHS="/srv/nas"
+
+# Mail Parameter
+MAIL_FROM='NAS-EntropyWatcher <my.email@example.com>'
+MAIL_TO='my.email@example.com'
+MAIL_SUBJECT_PREFIX='[NAS-EntropyWatcher]'
+
+#Mail-Alert-Log
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_nas.txt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############### nächstes File: /opt/apps/entropywatcher/config/os-av-weekly.env ###############
+# /opt/entropywatcher/os-av-weekly.env
+
+#DB/Label (man weiss nie, plötzlich wird es sinnvoll)
+SOURCE_LABEL=os-av-weekly
+
+# Breiter, aber noch realistisch ohne Root
+SCAN_PATHS="/usr/local,/opt,/var/www,/boot,/etc"
+
+
+CLAMAV_ENABLE=1
+CLAMAV_USE_CLAMD=1    # wenn du den Daemon verwenden willst (schneller)
+
+
+# Gleiche Excludes wie hot + typische Systemriesen raus
+CLAMAV_EXCLUDES_MODE=glob
+CLAMAV_EXCLUDES="*/.cache/*,*/node_modules/*,*/.venv/*,*/__pycache__/*,*/.git/*,\
+*.iso,*.img,*.vhd,*.vdi,*.qcow2,\
+/proc/*,/sys/*,/dev/*,/run/*,/var/tmp/*,/tmp/*,/var/cache/*,/var/log/*,\
+/var/lib/docker/*,/var/lib/containers/*,/var/lib/mysql/*,\
+/etc/ssh/*key*,/etc/shadow*,/etc/gshadow*,/etc/sudoers,/etc/sudoers.d/*,/etc/ppp/*"
+
+# Optional: Mail-Branding
+MAIL_FROM="OS-AV-Weekly <my.email@example.com>"
+MAIL_SUBJECT_PREFIX="[OS-AV-Weekly]"
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_os-av-weekly.txt
+
+############### nächstes File: /opt/apps/entropywatcher/config/os-av.env ###############
+# /opt/entropywatcher/os-av.env 
+
+# DB/Label (man weiss nie, plötzlich wird es sinnvoll)
+SOURCE_LABEL=os-av
+
+# Hot-/schreibbare Bereiche, in denen eher „Zeug landet“
+SCAN_PATHS="/var/www,/usr/local/bin,/usr/local/sbin,/opt"
+
+CLAMAV_ENABLE=1
+CLAMAV_USE_CLAMD=1    # wenn du den Daemon verwenden willst (schneller)
+
+# ClamAV-Filter (Regex-Engine, aber wir liefern Glob-ähnliche Patterns → überschaubar)
+CLAMAV_EXCLUDES_MODE=glob
+CLAMAV_EXCLUDES="*/.cache/*,*/node_modules/*,*/.venv/*,*/__pycache__/*,*/.git/*,*.iso,*.img,*.vhd,*.vdi,*.qcow2"
+
+# Optional: Mail-Branding
+MAIL_FROM='OS-AV-Hot <my.email@example.com>'
+MAIL_SUBJECT_PREFIX='[OS-AV-Hot]'
+ALERT_STATE_FILE=/var/lib/entropywatcher/last_alert_os-av.txt
+
+############### nächstes File: /opt/apps/entropywatcher/config/os.env ###############
+#  /opt/entropywatcher/os.env *
+
+#Label
+SOURCE_LABEL=os
+
+# Realistisch sinnvolle OS-Pfade; mit root hat man Vollsicht
+SCAN_PATHS="/usr/local,/opt,/var/www,/boot"
+
+# Glob-Filter: laute/veränderliche oder geschützte Bereiche raus
+EXCLUDES_MODE=glob
+EXCLUDES="/proc/*,/sys/*,/dev/*,/run/*,/tmp/*,/var/tmp/*,/var/cache/*,/var/log/*,\
+/var/lib/docker/*,/var/lib/containers/*,/var/lib/mysql/*,\
+/etc/ssh/*key*,/etc/shadow*,/etc/gshadow*,/etc/sudoers,/etc/sudoers.d/*,\
+/etc/ppp/*,/etc/mysql/debian.cnf"
+
+# Dinge messen, aber nicht fürs Scoring werten (reduziert False Positives)
+SCORE_EXCLUDES_MODE=glob
+SCORE_EXCLUDES="*.sqlite,*.db,*.bin,*.npy,*/.cache/*,*/.venv/*,*/node_modules/*,*/__pycache__/*"
+
+# Mail Parameter
+MAIL_FROM="OS-EntropyWatcher <my.email@example.com>"
+MAIL_SUBJECT_PREFIX="[OS-EntropyWatcher]"
+
+#Mail Rate-Limit File
+ALERT_STATE_FILE="/var/lib/entropywatcher/last_alert_os.txt"
+
+
